@@ -1,0 +1,56 @@
+# ======================
+# Python / Django
+# ======================
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.log
+*.pot
+*.pyc
+*.sqlite3
+db.sqlite3
+
+# Virtual env
+env/
+venv/
+.venv/
+
+# Django generated
+staticfiles/
+media/
+*.pid
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Environment variables / Secrets
+.env
+.env.local
+*.env
+settings_local.py
+secrets.json
+key.json
+
+# ======================
+# Node / React
+# ======================
+node_modules/
+npm-debug.log
+yarn-debug.log
+yarn-error.log
+build/
+dist/
+coverage/
+.next/
+out/
+
+# ======================
+# Other
+# ======================
+*.bak
+*.tmp
