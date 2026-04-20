@@ -7,7 +7,7 @@ function App() {
 
   useEffect(() => {
     axios
-      .get("http://127.0.0.1:8000/api/test/")
+      .get("http://127.0.0.1:8000/api/register")
       .then((res) => {
         setMessage(res.data.message);
       })
