@@ -1,54 +1,91 @@
 from django.contrib.auth import get_user_model
-from django.shortcuts import render
-from rest_framework.views import APIView
+from django.http import Http404, FileResponse
+from django.views import View
+from drf_spectacular.utils import extend_schema, extend_schema_view
 from rest_framework.response import Response
-from django.http import JsonResponse
-from rest_framework import status
+from rest_framework import status, generics, permissions
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from .serializers import RegisterSerializer
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from drf_yasg.utils import swagger_auto_schema
+from .serializers import RegisterSerializer, ProfileSerializer
+from .models import Profile
+from .utils import verify_image_token
+from rest_framework import generics, permissions
+from rest_framework.parsers import MultiPartParser, FormParser
+from drf_spectacular.utils import extend_schema, extend_schema_view
 
 
-# Create your views here
-class TestApi(APIView):
-    def get(self, request):
-        return Response({"message": "Test successful"})
+@extend_schema_view(
+    put=extend_schema(
+        request={
+            "multipart/form-data": {
+                "type": "object",
+                "properties": {
+                    "university": {"type": "string"},
+                    "bio": {"type": "string"},
+                    "profile_image": {
+                        "type": "string",
+                        "format": "binary"
+                    }
+                },
+                "required": ["profile_image"]
+            }
+        },
+        responses=ProfileSerializer
+    ),
+    patch=extend_schema(
+        request={
+            "multipart/form-data": {
+                "type": "object",
+                "properties": {
+                    "university": {"type": "string"},
+                    "bio": {"type": "string"},
+                    "profile_image": {
+                        "type": "string",
+                        "format": "binary"
+                    }
+                }
+            }
+        },
+        responses=ProfileSerializer
+    ),
+)
+class ProfileView(generics.RetrieveUpdateAPIView):
+    serializer_class = ProfileSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    # برای آپلود فایل
+    parser_classes = [MultiPartParser, FormParser]
+
+    def get_object(self):
+        return Profile.objects.get(user=self.request.user)
+
+    @extend_schema(
+        request={"multipart/form-data": ProfileSerializer},
+        responses=ProfileSerializer
+    )
+    def patch(self, request, *args, **kwargs):
+        return super().patch(request, *args, **kwargs)
+
+    @extend_schema(
+        request={"multipart/form-data": ProfileSerializer},
+        responses=ProfileSerializer
+    )
+    def put(self, request, *args, **kwargs):
+        return super().put(request, *args, **kwargs)
 
 
-# Create your views here
+class SecureProfileImageView(View):
 
+    def get(self, request, token):
 
-class RegisterView(APIView):
-    @swagger_auto_schema(request_body=RegisterSerializer)
-    def post(self, request):
-        serializer = RegisterSerializer(data=request.data)
+        profile_id = verify_image_token(token)
 
-        if serializer.is_valid():
-            user = serializer.save()
-            # Generate JWT tokens
-            refresh = RefreshToken.for_user(user)
+        if not profile_id:
+            raise Http404("Invalid or expired link")
 
-            return Response({
-                "message": "user created",
-                "refresh": str(refresh),
-                "access": str(refresh.access_token),
-            }, status=status.HTTP_201_CREATED)
+        profile = Profile.objects.get(id=profile_id)
 
-        return Response(serializer.errors, status=400)
+        if not profile.profile_image:
+            raise Http404("Image not found")
 
-
-def test_api(request):
-    return JsonResponse({"message": "Hello from Django!"})
-
-
-def register(request):
-    get_user_model().objects.create_user(username="negar", password="123")
-    return 1
-
-
-def about_page_view(request):
-    context = {"name": "Alice"}  # new
-    return render(request, "pages/about.html")  # new
+        return FileResponse(profile.profile_image.open("rb"))
