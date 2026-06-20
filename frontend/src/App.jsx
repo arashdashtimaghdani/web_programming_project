@@ -21,7 +21,7 @@ const api = {
     return res.json();
   },
   get: (path, token) => api.request("GET", path, null, token),
-  post: (path, body, token) => api.request("POST", path, body, token),
+  post: (path, body, token, isForm) => api.request("POST", path, body, token, isForm),
   patch: (path, body, token, isForm) => api.request("PATCH", path, body, token, isForm),
   put: (path, body, token, isForm) => api.request("PUT", path, body, token, isForm),
 };
@@ -217,6 +217,11 @@ function ProjectsPage({ nav }) {
                 <span style={styles.badge}>{p.visibility === "PB" ? "عمومی" : "خصوصی"}</span>
               </div>
               <p style={styles.cardDesc}>{p.description}</p>
+              {p.file_url && (
+                    <a href={p.file_url} target="_blank" style={styles.downloadLink}>
+                    ⬇ دانلود فایل
+                </a>
+                )}
               <div style={styles.cardFooter}>
                 <span style={styles.cardDate}>{new Date(p.created_at).toLocaleDateString("fa-IR")}</span>
                 <button
@@ -231,17 +236,18 @@ function ProjectsPage({ nav }) {
 
       {totalPages > 1 && (
         <div style={styles.pagination}>
+            <button
+            style={styles.pageBtn}
+            disabled={page >= totalPages}
+            onClick={() => setPage(p => p + 1)}
+          >بعدی →</button>
+          <span style={{ color: "#666", fontSize: 14 }}>{page} از {totalPages}</span>
           <button
             style={styles.pageBtn}
             disabled={page <= 1}
             onClick={() => setPage(p => p - 1)}
           >← قبلی</button>
-          <span style={{ color: "#666", fontSize: 14 }}>{page} از {totalPages}</span>
-          <button
-            style={styles.pageBtn}
-            disabled={page >= totalPages}
-            onClick={() => setPage(p => p + 1)}
-          >بعدی →</button>
+
         </div>
       )}
     </div>
@@ -289,11 +295,14 @@ function ProjectFormPage({ nav, projectId }) {
       fd.append("slug", slug);
       fd.append("visibility", visibility);
       if (file) fd.append("file", file);
+      if (file && file.size > 10 * 1024 * 1024) {
+           return setError("حجم فایل نباید بیشتر از ۱۰ مگابایت باشد.");
+      }
 
       if (isEdit) {
         await api.patch(`/projects/my-projects/${projectId}/`, fd, tokens.access, true);
       } else {
-        await api.post(`/projects/my-projects/`, Object.fromEntries(fd), tokens.access);
+        await api.post(`/projects/my-projects/`, fd, tokens.access,true);
       }
       nav("projects");
     } catch (e) {
@@ -605,6 +614,19 @@ const styles = {
   cardDesc: { color: "#666", fontSize: 14, margin: "0 0 16px", lineHeight: 1.6 },
   cardFooter: { display: "flex", alignItems: "center", justifyContent: "space-between" },
   cardDate: { color: "#aaa", fontSize: 12 },
+  downloadLink: {
+  display: "inline-block",
+  fontSize: 13,
+  color: "#fff",
+  textDecoration: "none",
+  border: "1px solid #2563eb",
+  borderRadius: 7,
+  padding: "6px 14px",
+  backgroundColor: "#111",
+  fontFamily: "inherit",
+  fontWeight: 500,
+  marginBottom: 12,
+},
   badge: { fontSize: 12, padding: "2px 9px", borderRadius: 20, backgroundColor: "#f0f0f0", color: "#666" },
 
   // pagination

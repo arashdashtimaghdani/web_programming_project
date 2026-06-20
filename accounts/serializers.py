@@ -43,6 +43,7 @@ class ProfileSerializer(serializers.ModelSerializer):
             'profile_image_url',
             'profile_image'
         ]
+        read_only_fields = ['id', 'email','username', 'created_at', 'updated_at']
 
     def get_profile_image_url(self, obj):
         token = generate_image_token(obj.id)
@@ -55,6 +56,7 @@ class ProfileSerializer(serializers.ModelSerializer):
         )
 
         return request.build_absolute_uri(url)
+
 
 
 
