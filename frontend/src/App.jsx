@@ -69,6 +69,7 @@ function Router() {
         {page === "project-form" && <ProjectFormPage nav={nav} projectId={projectId} />}
         {page === "profile" && <ProfilePage />}
         {page === "comments" && <CommentsPage />}
+        {page === "search" && <SearchPage />}
       </main>
     </div>
   );
@@ -93,6 +94,10 @@ function Nav({ page, nav }) {
         style={{ ...styles.navBtn, ...(page === "comments" ? styles.navBtnActive : { backgroundColor: "transparent" }) }}
         onClick={() => nav("comments")}
         >کامنت‌ها</button>
+        <button
+        style={{ ...styles.navBtn, ...(page === "search" ? styles.navBtnActive : { backgroundColor: "transparent" }) }}
+        onClick={() => nav("search")}
+        >جستجو</button>
         <button style={{ ...styles.navBtn, backgroundColor: "transparent", color: "#999" }} onClick={logout}>خروج</button>
       </div>
     </nav>
@@ -570,6 +575,97 @@ function CommentsPage() {
   );
 }
 
+// ─── SEARCH PAGE ──────────────────────────────────────────────────────────────
+function SearchPage() {
+  const { tokens } = useAuth();
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [searched, setSearched] = useState(false);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const PAGE_SIZE = 10;
+
+  const runSearch = async (p = 1) => {
+    const q = query.trim();
+    if (!q) return;
+    setLoading(true);
+    setSearched(true);
+    try {
+      const data = await api.get(`/projects/search/?q=${encodeURIComponent(q)}&page=${p}`, tokens.access);
+      setResults(data.results ?? data);
+      setTotal(data.count ?? (data.results ?? data).length);
+      setPage(p);
+    } catch {
+      setResults([]);
+      setTotal(0);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const totalPages = Math.ceil(total / PAGE_SIZE);
+
+  return (
+    <div>
+      <div style={styles.pageHeader}>
+        <h2 style={styles.pageTitle}>جستجوی پروژه‌ها</h2>
+      </div>
+
+      <div style={styles.searchBar}>
+        <input
+          style={styles.searchInput}
+          placeholder="عنوان یا توضیحات پروژه را جستجو کنید..."
+          value={query}
+          onChange={e => setQuery(e.target.value)}
+          onKeyDown={e => e.key === "Enter" && runSearch(1)}
+        />
+        <button style={styles.btnPrimary} onClick={() => runSearch(1)} disabled={loading || !query.trim()}>
+          {loading ? "..." : "جستجو"}
+        </button>
+      </div>
+
+      {!searched ? (
+        <div style={styles.empty}>برای شروع، عبارتی را جستجو کنید.</div>
+      ) : loading ? (
+        <div style={styles.empty}>در حال جستجو...</div>
+      ) : results.length === 0 ? (
+        <div style={styles.emptyState}>
+          <p style={{ color: "#999" }}>نتیجه‌ای برای «{query}» پیدا نشد.</p>
+        </div>
+      ) : (
+        <div style={styles.projectGrid}>
+          {results.map(p => (
+            <div key={p.id} style={styles.card}>
+              <div style={styles.cardHeader}>
+                <h3 style={styles.cardTitle}>{p.title}</h3>
+                <span style={styles.badge}>{p.author_username}</span>
+              </div>
+              <p style={styles.cardDesc}>{p.description}</p>
+              {p.file_url && (
+                <a href={p.file_url} target="_blank" style={styles.downloadLink}>
+                  ⬇ دانلود فایل پروژه
+                </a>
+              )}
+              <div style={styles.cardFooter}>
+                <span style={styles.cardDate}>{new Date(p.created_at).toLocaleDateString("fa-IR")}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {searched && totalPages > 1 && (
+        <div style={styles.pagination}>
+          <button style={styles.pageBtn} disabled={page >= totalPages} onClick={() => runSearch(page + 1)}>بعدی →</button>
+          <span style={{ color: "#666", fontSize: 14 }}>{page} از {totalPages}</span>
+          <button style={styles.pageBtn} disabled={page <= 1} onClick={() => runSearch(page - 1)}>← قبلی</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── STYLES ───────────────────────────────────────────────────────────────────
 const styles = {
   shell: { minHeight: "100vh", backgroundColor: "#fafafa", fontFamily: "system-ui, sans-serif", direction: "rtl" },
@@ -653,6 +749,10 @@ const styles = {
   // form page
   formWrap: { maxWidth: 560 },
   formCard: { backgroundColor: "#fff", border: "1px solid #e8e8e8", borderRadius: 10, padding: "24px 28px" },
+
+  // search
+  searchBar: { display: "flex", gap: 10, marginBottom: 28 },
+  searchInput: { flex: 1, padding: "10px 14px", border: "1px solid #d0d7de", borderRadius: 6, fontSize: 14, fontFamily: "inherit", outline: "none", color: "#111", direction: "rtl" },
 
 };
 
