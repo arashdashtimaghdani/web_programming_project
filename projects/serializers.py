@@ -25,6 +25,23 @@ class CommentProjectOwnerSerializer(serializers.ModelSerializer):
         return super().create(validated_data)
 
 
+class CommentCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Comment
+        fields = ["body"]
+
+    def create(self, validated_data):
+        request = self.context["request"]
+        project = self.context["project"]
+
+        return Comment.objects.create(
+            author=request.user,
+            project=project,
+            body=validated_data["body"],
+            status=Comment.Status.PENDING
+        )
+
+
 class ProjectSerializer(serializers.ModelSerializer):
     author_username = serializers.CharField(source='author.username', read_only=True)
     file = serializers.FileField()
@@ -44,5 +61,15 @@ class ProjectSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Project
-        fields = ['id', 'title', 'file','file_url', 'slug', 'description', 'author', 'author_username', 'created_at', 'updated_at']
-        read_only_fields = ['id', 'author','file_url', 'created_at', 'updated_at']
+        fields = ['id', 'title', 'file', 'file_url', 'slug', 'description', 'author', 'author_username', 'created_at',
+                  'updated_at']
+        read_only_fields = ['id', 'author', 'file_url', 'created_at', 'updated_at']
+
+
+class CommentSerializer(serializers.ModelSerializer):
+    author_username = serializers.ReadOnlyField(source="author.username")
+
+    class Meta:
+        model = Comment
+        fields = ["id", "author_username", "body", "created"]
+        read_only_fields = ["id", "author_username", "created"]

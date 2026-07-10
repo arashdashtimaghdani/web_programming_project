@@ -67,9 +67,10 @@ function Router() {
       <main style={styles.main}>
         {page === "projects" && <ProjectsPage nav={nav} />}
         {page === "project-form" && <ProjectFormPage nav={nav} projectId={projectId} />}
+        {page === "project-detail" && <ProjectDetailPage nav={nav} projectId={projectId} />}
         {page === "profile" && <ProfilePage />}
         {page === "comments" && <CommentsPage />}
-        {page === "search" && <SearchPage />}
+        {page === "search" && <SearchPage nav={nav} />}
       </main>
     </div>
   );
@@ -91,12 +92,12 @@ function Nav({ page, nav }) {
           onClick={() => nav("profile")}
         >پروفایل</button>
         <button
-        style={{ ...styles.navBtn, ...(page === "comments" ? styles.navBtnActive : { backgroundColor: "transparent" }) }}
-        onClick={() => nav("comments")}
+          style={{ ...styles.navBtn, ...(page === "comments" ? styles.navBtnActive : { backgroundColor: "transparent" }) }}
+          onClick={() => nav("comments")}
         >کامنت‌ها</button>
         <button
-        style={{ ...styles.navBtn, ...(page === "search" ? styles.navBtnActive : { backgroundColor: "transparent" }) }}
-        onClick={() => nav("search")}
+          style={{ ...styles.navBtn, ...(page === "search" ? styles.navBtnActive : { backgroundColor: "transparent" }) }}
+          onClick={() => nav("search")}
         >جستجو</button>
         <button style={{ ...styles.navBtn, backgroundColor: "transparent", color: "#999" }} onClick={logout}>خروج</button>
       </div>
@@ -135,13 +136,13 @@ function AuthPage() {
 
         <div style={styles.tabRow}>
           <button
-  style={{ ...styles.tab, ...(mode === "login" ? styles.tabActive : { backgroundColor: "transparent", color: "#555" }) }}
-  onClick={() => setMode("login")}
-        >ورود</button>
-<button
-  style={{ ...styles.tab, ...(mode === "register" ? styles.tabActive : { backgroundColor: "transparent", color: "#555" }) }}
-  onClick={() => setMode("register")}
->ثبت‌نام</button>
+            style={{ ...styles.tab, ...(mode === "login" ? styles.tabActive : { backgroundColor: "transparent", color: "#555" }) }}
+            onClick={() => setMode("login")}
+          >ورود</button>
+          <button
+            style={{ ...styles.tab, ...(mode === "register" ? styles.tabActive : { backgroundColor: "transparent", color: "#555" }) }}
+            onClick={() => setMode("register")}
+          >ثبت‌نام</button>
         </div>
 
         <input
@@ -187,7 +188,7 @@ function ProjectsPage({ nav }) {
       const data = await api.get(`/projects/my-projects/?page=${p}`, tokens.access);
       setProjects(data.results ?? data);
       setTotal(data.count ?? (data.results ?? data).length);
-    } catch { /* ignore */ }
+    } catch { }
     finally { setLoading(false); }
   };
 
@@ -216,22 +217,22 @@ function ProjectsPage({ nav }) {
       ) : (
         <div style={styles.projectGrid}>
           {projects.map(p => (
-            <div key={p.id} style={styles.card}>
+            <div key={p.id} style={{ ...styles.card, cursor: "pointer" }} onClick={() => nav("project-detail", p.id)}>
               <div style={styles.cardHeader}>
                 <h3 style={styles.cardTitle}>{p.title}</h3>
                 <span style={styles.badge}>{p.visibility === "PB" ? "عمومی" : "خصوصی"}</span>
               </div>
               <p style={styles.cardDesc}>{p.description}</p>
               {p.file_url && (
-                    <a href={p.file_url} target="_blank" style={styles.downloadLink}>
-                    ⬇ دانلود فایل
+                <a href={p.file_url} target="_blank" style={styles.downloadLink} onClick={e => e.stopPropagation()}>
+                  ⬇ دانلود فایل
                 </a>
-                )}
+              )}
               <div style={styles.cardFooter}>
                 <span style={styles.cardDate}>{new Date(p.created_at).toLocaleDateString("fa-IR")}</span>
                 <button
                   style={styles.btnSecondary}
-                  onClick={() => nav("project-form", p.id)}
+                  onClick={e => { e.stopPropagation(); nav("project-form", p.id); }}
                 >ویرایش</button>
               </div>
             </div>
@@ -241,20 +242,115 @@ function ProjectsPage({ nav }) {
 
       {totalPages > 1 && (
         <div style={styles.pagination}>
-            <button
-            style={styles.pageBtn}
-            disabled={page >= totalPages}
-            onClick={() => setPage(p => p + 1)}
-          >بعدی →</button>
+          <button style={styles.pageBtn} disabled={page >= totalPages} onClick={() => setPage(p => p + 1)}>بعدی →</button>
           <span style={{ color: "#666", fontSize: 14 }}>{page} از {totalPages}</span>
-          <button
-            style={styles.pageBtn}
-            disabled={page <= 1}
-            onClick={() => setPage(p => p - 1)}
-          >← قبلی</button>
-
+          <button style={styles.pageBtn} disabled={page <= 1} onClick={() => setPage(p => p - 1)}>← قبلی</button>
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── PROJECT DETAIL PAGE ─────────────────────────────────────────────────────
+function ProjectDetailPage({ nav, projectId }) {
+  const { tokens } = useAuth();
+  const [project, setProject] = useState(null);
+  const [comments, setComments] = useState([]);
+  const [loadingProject, setLoadingProject] = useState(true);
+  const [loadingComments, setLoadingComments] = useState(true);
+  const [body, setBody] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState("");
+  const [submitSuccess, setSubmitSuccess] = useState(false);
+
+  useEffect(() => {
+    api.get(`/projects/my-projects/`, tokens.access)
+      .then(data => {
+        const all = data.results ?? data;
+        const p = all.find(x => x.id === projectId);
+        setProject(p ?? null);
+      })
+      .finally(() => setLoadingProject(false));
+
+    api.get(`/projects/projects/${projectId}/comments/`, tokens.access)
+      .then(data => setComments(data.results ?? data))
+      .catch(() => setComments([]))
+      .finally(() => setLoadingComments(false));
+  }, [projectId]);
+
+  const submitComment = async () => {
+    if (!body.trim()) return setSubmitError("متن کامنت نمی‌تواند خالی باشد");
+    setSubmitError(""); setSubmitting(true);
+    try {
+      await api.post(`/projects/projects/${projectId}/comments/add/`, { body }, tokens.access);
+      setBody("");
+      setSubmitSuccess(true);
+      setTimeout(() => setSubmitSuccess(false), 4000);
+    } catch (e) {
+      setSubmitError(e?.body?.[0] || "خطا در ثبت کامنت");
+    } finally { setSubmitting(false); }
+  };
+
+  if (loadingProject) return <div style={styles.empty}>در حال بارگذاری...</div>;
+  if (!project) return <div style={styles.empty}>پروژه پیدا نشد.</div>;
+
+  return (
+    <div>
+      <button style={styles.backBtn} onClick={() => nav("projects")}>← بازگشت</button>
+
+      <div style={{ ...styles.card, marginTop: 16, marginBottom: 28 }}>
+        <div style={styles.cardHeader}>
+          <h2 style={{ ...styles.pageTitle, margin: 0 }}>{project.title}</h2>
+          <span style={styles.badge}>{project.visibility === "PB" ? "عمومی" : "خصوصی"}</span>
+        </div>
+        <p style={{ ...styles.cardDesc, marginBottom: 12 }}>{project.description}</p>
+        {project.file_url && (
+          <a href={project.file_url} target="_blank" style={styles.downloadLink}>
+            ⬇ دانلود فایل پروژه
+          </a>
+        )}
+        <div style={styles.cardFooter}>
+          <span style={styles.cardDate}>{new Date(project.created_at).toLocaleDateString("fa-IR")}</span>
+          <span style={styles.cardDate}>{project.author_username}</span>
+        </div>
+      </div>
+
+      <h3 style={{ fontSize: 16, fontWeight: 700, color: "#111", marginBottom: 16 }}>
+        کامنت‌ها {!loadingComments && `(${comments.length})`}
+      </h3>
+
+      {loadingComments ? (
+        <div style={styles.empty}>در حال بارگذاری کامنت‌ها...</div>
+      ) : comments.length === 0 ? (
+        <p style={{ color: "#aaa", fontSize: 14, marginBottom: 24 }}>هنوز کامنتی ثبت نشده.</p>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 28 }}>
+          {comments.map(c => (
+            <div key={c.id} style={styles.commentCard}>
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                <span style={styles.commentAuthor}>@{c.author_username}</span>
+                <span style={styles.cardDate}>{new Date(c.created).toLocaleDateString("fa-IR")}</span>
+              </div>
+              <p style={{ margin: 0, fontSize: 14, color: "#444", lineHeight: 1.6 }}>{c.body}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div style={styles.formCard}>
+        <h4 style={{ margin: "0 0 14px", fontSize: 14, fontWeight: 600, color: "#111" }}>ثبت کامنت جدید</h4>
+        <textarea
+          style={{ ...styles.input, minHeight: 90, resize: "vertical" }}
+          placeholder="کامنت خود را بنویسید..."
+          value={body}
+          onChange={e => setBody(e.target.value)}
+        />
+        {submitError && <p style={styles.error}>{submitError}</p>}
+        {submitSuccess && <p style={styles.success}>کامنت شما ثبت شد و پس از تأیید نمایش داده می‌شود ✓</p>}
+        <button style={styles.btnPrimary} onClick={submitComment} disabled={submitting}>
+          {submitting ? "در حال ثبت..." : "ثبت کامنت"}
+        </button>
+      </div>
     </div>
   );
 }
@@ -292,6 +388,7 @@ function ProjectFormPage({ nav, projectId }) {
 
   const save = async () => {
     if (!title || !description || !slug) return setError("عنوان، توضیحات و slug الزامی است");
+    if (file && file.size > 10 * 1024 * 1024) return setError("حجم فایل نباید بیشتر از ۱۰ مگابایت باشد.");
     setError(""); setSaving(true);
     try {
       const fd = new FormData();
@@ -300,14 +397,11 @@ function ProjectFormPage({ nav, projectId }) {
       fd.append("slug", slug);
       fd.append("visibility", visibility);
       if (file) fd.append("file", file);
-      if (file && file.size > 10 * 1024 * 1024) {
-           return setError("حجم فایل نباید بیشتر از ۱۰ مگابایت باشد.");
-      }
 
       if (isEdit) {
         await api.patch(`/projects/my-projects/${projectId}/`, fd, tokens.access, true);
       } else {
-        await api.post(`/projects/my-projects/`, fd, tokens.access,true);
+        await api.post(`/projects/my-projects/`, fd, tokens.access, true);
       }
       nav("projects");
     } catch (e) {
@@ -330,10 +424,7 @@ function ProjectFormPage({ nav, projectId }) {
         <input
           style={styles.input}
           value={title}
-          onChange={e => {
-            setTitle(e.target.value);
-            if (!isEdit) setSlug(autoSlug(e.target.value));
-          }}
+          onChange={e => { setTitle(e.target.value); if (!isEdit) setSlug(autoSlug(e.target.value)); }}
           placeholder="عنوان پروژه"
         />
 
@@ -354,11 +445,7 @@ function ProjectFormPage({ nav, projectId }) {
         />
 
         <label style={styles.label}>دیدپذیری</label>
-        <select
-          style={styles.input}
-          value={visibility}
-          onChange={e => setVisibility(e.target.value)}
-        >
+        <select style={styles.input} value={visibility} onChange={e => setVisibility(e.target.value)}>
           <option value="PR">خصوصی</option>
           <option value="PB">عمومی</option>
         </select>
@@ -376,9 +463,7 @@ function ProjectFormPage({ nav, projectId }) {
           <button style={styles.btnPrimary} onClick={save} disabled={saving}>
             {saving ? "در حال ذخیره..." : isEdit ? "ذخیره تغییرات" : "ایجاد پروژه"}
           </button>
-          <button style={styles.btnSecondary} onClick={() => nav("projects")}>
-            انصراف
-          </button>
+          <button style={styles.btnSecondary} onClick={() => nav("projects")}>انصراف</button>
         </div>
       </div>
     </div>
@@ -399,11 +484,7 @@ function ProfilePage() {
 
   useEffect(() => {
     api.get("/accounts/profile/", tokens.access)
-      .then(data => {
-        setProfile(data);
-        setBio(data.bio ?? "");
-        setUniversity(data.university ?? "");
-      })
+      .then(data => { setProfile(data); setBio(data.bio ?? ""); setUniversity(data.university ?? ""); })
       .finally(() => setLoading(false));
   }, []);
 
@@ -418,9 +499,8 @@ function ProfilePage() {
       setProfile(updated);
       setSuccess(true);
       setTimeout(() => setSuccess(false), 3000);
-    } catch (e) {
-      setError("خطا در ذخیره اطلاعات");
-    } finally { setSaving(false); }
+    } catch { setError("خطا در ذخیره اطلاعات"); }
+    finally { setSaving(false); }
   };
 
   if (loading) return <div style={styles.empty}>در حال بارگذاری...</div>;
@@ -428,21 +508,13 @@ function ProfilePage() {
   return (
     <div style={styles.formWrap}>
       <h2 style={styles.pageTitle}>پروفایل</h2>
-
       <div style={styles.formCard}>
         <div style={styles.profileTop}>
           <div style={styles.avatarWrap}>
             {profile?.profile_image_url ? (
-              <img
-                src={profile.profile_image_url}
-                alt="profile"
-                style={styles.avatar}
-                onError={e => { e.target.style.display = "none"; }}
-              />
+              <img src={profile.profile_image_url} alt="profile" style={styles.avatar} onError={e => { e.target.style.display = "none"; }} />
             ) : (
-              <div style={styles.avatarPlaceholder}>
-                {profile?.username?.[0]?.toUpperCase() ?? "U"}
-              </div>
+              <div style={styles.avatarPlaceholder}>{profile?.username?.[0]?.toUpperCase() ?? "U"}</div>
             )}
           </div>
           <div>
@@ -452,28 +524,13 @@ function ProfilePage() {
         </div>
 
         <label style={styles.label}>دانشگاه</label>
-        <input
-          style={styles.input}
-          value={university}
-          onChange={e => setUniversity(e.target.value)}
-          placeholder="نام دانشگاه"
-        />
+        <input style={styles.input} value={university} onChange={e => setUniversity(e.target.value)} placeholder="نام دانشگاه" />
 
         <label style={styles.label}>بیوگرافی</label>
-        <textarea
-          style={{ ...styles.input, minHeight: 100, resize: "vertical" }}
-          value={bio}
-          onChange={e => setBio(e.target.value)}
-          placeholder="چند جمله درباره خودت بنویس..."
-        />
+        <textarea style={{ ...styles.input, minHeight: 100, resize: "vertical" }} value={bio} onChange={e => setBio(e.target.value)} placeholder="چند جمله درباره خودت بنویس..." />
 
         <label style={styles.label}>تصویر پروفایل</label>
-        <input
-          type="file"
-          accept="image/*"
-          style={{ ...styles.input, padding: "10px 12px" }}
-          onChange={e => setImageFile(e.target.files[0])}
-        />
+        <input type="file" accept="image/*" style={{ ...styles.input, padding: "10px 12px" }} onChange={e => setImageFile(e.target.files[0])} />
 
         {error && <p style={styles.error}>{error}</p>}
         {success && <p style={styles.success}>اطلاعات با موفقیت ذخیره شد ✓</p>}
@@ -485,6 +542,7 @@ function ProfilePage() {
     </div>
   );
 }
+
 // ─── COMMENTS PAGE ────────────────────────────────────────────────────────────
 function CommentsPage() {
   const { tokens } = useAuth();
@@ -515,7 +573,6 @@ function CommentsPage() {
 
   const statusLabel = (s) => s === "AP" ? "تأیید شده" : s === "RJ" ? "رد شده" : "در انتظار";
   const statusColor = (s) => s === "AP" ? "#27ae60" : s === "RJ" ? "#c0392b" : "#f39c12";
-
   const totalPages = Math.ceil(total / PAGE_SIZE);
 
   return (
@@ -527,9 +584,7 @@ function CommentsPage() {
       {loading ? (
         <div style={styles.empty}>در حال بارگذاری...</div>
       ) : comments.length === 0 ? (
-        <div style={styles.emptyState}>
-          <p style={{ color: "#999" }}>هیچ کامنتی وجود ندارد.</p>
-        </div>
+        <div style={styles.emptyState}><p style={{ color: "#999" }}>هیچ کامنتی وجود ندارد.</p></div>
       ) : (
         <div style={styles.projectGrid}>
           {comments.map(c => (
@@ -543,21 +598,9 @@ function CommentsPage() {
               <p style={styles.commentBody}>{c.body}</p>
               <p style={styles.commentProject}>پروژه #{c.project}</p>
               <div style={styles.commentActions}>
-                <button
-                  style={{ ...styles.actionBtn, ...(c.status === "AP" ? styles.actionBtnActive : { backgroundColor: "transparent" }) }}
-                  onClick={() => updateStatus(c.id, "AP")}
-                  disabled={c.status === "AP"}
-                >✓ تأیید</button>
-                <button
-                  style={{ ...styles.actionBtn, ...(c.status === "RJ" ? styles.actionBtnDanger : { backgroundColor: "transparent" }) }}
-                  onClick={() => updateStatus(c.id, "RJ")}
-                  disabled={c.status === "RJ"}
-                >✕ رد</button>
-                <button
-                  style={{ ...styles.actionBtn, ...(c.status === "PD" ? styles.actionBtnWarning : { backgroundColor: "transparent" }) }}
-                  onClick={() => updateStatus(c.id, "PD")}
-                  disabled={c.status === "PD"}
-                >⏳ انتظار</button>
+                <button style={{ ...styles.actionBtn, ...(c.status === "AP" ? styles.actionBtnActive : { backgroundColor: "transparent" }) }} onClick={() => updateStatus(c.id, "AP")} disabled={c.status === "AP"}>✓ تأیید</button>
+                <button style={{ ...styles.actionBtn, ...(c.status === "RJ" ? styles.actionBtnDanger : { backgroundColor: "transparent" }) }} onClick={() => updateStatus(c.id, "RJ")} disabled={c.status === "RJ"}>✕ رد</button>
+                <button style={{ ...styles.actionBtn, ...(c.status === "PD" ? styles.actionBtnWarning : { backgroundColor: "transparent" }) }} onClick={() => updateStatus(c.id, "PD")} disabled={c.status === "PD"}>⏳ انتظار</button>
               </div>
             </div>
           ))}
@@ -576,7 +619,7 @@ function CommentsPage() {
 }
 
 // ─── SEARCH PAGE ──────────────────────────────────────────────────────────────
-function SearchPage() {
+function SearchPage({ nav }) {
   const { tokens } = useAuth();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState([]);
@@ -589,19 +632,14 @@ function SearchPage() {
   const runSearch = async (p = 1) => {
     const q = query.trim();
     if (!q) return;
-    setLoading(true);
-    setSearched(true);
+    setLoading(true); setSearched(true);
     try {
       const data = await api.get(`/projects/search/?q=${encodeURIComponent(q)}&page=${p}`, tokens.access);
       setResults(data.results ?? data);
       setTotal(data.count ?? (data.results ?? data).length);
       setPage(p);
-    } catch {
-      setResults([]);
-      setTotal(0);
-    } finally {
-      setLoading(false);
-    }
+    } catch { setResults([]); setTotal(0); }
+    finally { setLoading(false); }
   };
 
   const totalPages = Math.ceil(total / PAGE_SIZE);
@@ -630,20 +668,18 @@ function SearchPage() {
       ) : loading ? (
         <div style={styles.empty}>در حال جستجو...</div>
       ) : results.length === 0 ? (
-        <div style={styles.emptyState}>
-          <p style={{ color: "#999" }}>نتیجه‌ای برای «{query}» پیدا نشد.</p>
-        </div>
+        <div style={styles.emptyState}><p style={{ color: "#999" }}>نتیجه‌ای برای «{query}» پیدا نشد.</p></div>
       ) : (
         <div style={styles.projectGrid}>
           {results.map(p => (
-            <div key={p.id} style={styles.card}>
+            <div key={p.id} style={{ ...styles.card, cursor: "pointer" }} onClick={() => nav("project-detail", p.id)}>
               <div style={styles.cardHeader}>
                 <h3 style={styles.cardTitle}>{p.title}</h3>
                 <span style={styles.badge}>{p.author_username}</span>
               </div>
               <p style={styles.cardDesc}>{p.description}</p>
               {p.file_url && (
-                <a href={p.file_url} target="_blank" style={styles.downloadLink}>
+                <a href={p.file_url} target="_blank" style={styles.downloadLink} onClick={e => e.stopPropagation()}>
                   ⬇ دانلود فایل پروژه
                 </a>
               )}
@@ -676,7 +712,6 @@ const styles = {
   navBtnActive: { color: "#111", fontWeight: 600, backgroundColor: "#f0f0f0" },
   main: { maxWidth: 800, margin: "0 auto", padding: "32px 20px" },
 
-  // auth
   authWrap: { minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "#fafafa", direction: "rtl" },
   authCard: { width: "100%", maxWidth: 380, backgroundColor: "#fff", border: "1px solid #e8e8e8", borderRadius: 12, padding: 32 },
   authTitle: { margin: "0 0 4px", fontSize: 24, fontWeight: 700, color: "#111", textAlign: "center" },
@@ -685,24 +720,20 @@ const styles = {
   tab: { flex: 1, border: "none", background: "transparent", cursor: "pointer", padding: "8px 0", borderRadius: 6, fontSize: 14, color: "#333", fontFamily: "inherit", transition: "all .15s", fontWeight: 500 },
   tabActive: { backgroundColor: "#fff", color: "#111", fontWeight: 700, boxShadow: "0 1px 4px rgba(0,0,0,.12)" },
 
-  // form elements
   input: { display: "block", width: "100%", boxSizing: "border-box", padding: "10px 12px", border: "1px solid #e0e0e0", borderRadius: 7, fontSize: 14, fontFamily: "inherit", outline: "none", backgroundColor: "#fff", marginBottom: 12, color: "#111", direction: "rtl" },
   label: { display: "block", fontSize: 13, color: "#555", marginBottom: 5, fontWeight: 500 },
   error: { color: "#c0392b", fontSize: 13, margin: "0 0 12px", padding: "8px 12px", backgroundColor: "#fdf0ee", borderRadius: 6, border: "1px solid #f5c6c0" },
   success: { color: "#27ae60", fontSize: 13, margin: "0 0 12px", padding: "8px 12px", backgroundColor: "#eafaf1", borderRadius: 6, border: "1px solid #a9dfbf" },
 
-  // buttons
   btnPrimary: { padding: "10px 20px", backgroundColor: "#111", color: "#fff", border: "none", borderRadius: 7, cursor: "pointer", fontSize: 14, fontFamily: "inherit", fontWeight: 500 },
   btnSecondary: { padding: "8px 16px", backgroundColor: "#fff", color: "#555", border: "1px solid #ddd", borderRadius: 7, cursor: "pointer", fontSize: 14, fontFamily: "inherit" },
   backBtn: { background: "none", border: "none", cursor: "pointer", fontSize: 14, color: "#666", fontFamily: "inherit", padding: 0, marginBottom: 8 },
 
-  // pages
   pageHeader: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24, gap: 12 },
   pageTitle: { fontSize: 20, fontWeight: 700, color: "#111", margin: 0 },
   empty: { textAlign: "center", color: "#aaa", padding: "60px 0", fontSize: 15 },
   emptyState: { textAlign: "center", padding: "60px 0" },
 
-  // project grid
   projectGrid: { display: "flex", flexDirection: "column", gap: 12 },
   card: { backgroundColor: "#fff", border: "1px solid #e8e8e8", borderRadius: 10, padding: "18px 20px", transition: "box-shadow .15s" },
   cardHeader: { display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 8 },
@@ -710,33 +741,19 @@ const styles = {
   cardDesc: { color: "#666", fontSize: 14, margin: "0 0 16px", lineHeight: 1.6 },
   cardFooter: { display: "flex", alignItems: "center", justifyContent: "space-between" },
   cardDate: { color: "#aaa", fontSize: 12 },
-  downloadLink: {
-  display: "inline-block",
-  fontSize: 13,
-  color: "#fff",
-  textDecoration: "none",
-  border: "1px solid #2563eb",
-  borderRadius: 7,
-  padding: "6px 14px",
-  backgroundColor: "#111",
-  fontFamily: "inherit",
-  fontWeight: 500,
-  marginBottom: 12,
-},
   badge: { fontSize: 12, padding: "2px 9px", borderRadius: 20, backgroundColor: "#f0f0f0", color: "#666" },
+  downloadLink: { display: "inline-block", fontSize: 13, color: "#fff", textDecoration: "none", border: "none", borderRadius: 7, padding: "6px 14px", backgroundColor: "#374151", fontFamily: "inherit", fontWeight: 500, marginBottom: 12 },
 
-  // pagination
   pagination: { display: "flex", alignItems: "center", justifyContent: "center", gap: 16, marginTop: 28 },
   pageBtn: { background: "#fff", border: "1px solid #ddd", borderRadius: 6, cursor: "pointer", padding: "6px 14px", fontSize: 13, fontFamily: "inherit", color: "#555" },
 
-  // profile
   profileTop: { display: "flex", alignItems: "center", gap: 16, marginBottom: 28, paddingBottom: 24, borderBottom: "1px solid #f0f0f0" },
   avatarWrap: { flexShrink: 0 },
   avatar: { width: 64, height: 64, borderRadius: "50%", objectFit: "cover", border: "2px solid #e8e8e8" },
   avatarPlaceholder: { width: 64, height: 64, borderRadius: "50%", backgroundColor: "#111", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24, fontWeight: 700 },
   profileName: { margin: "0 0 2px", fontWeight: 600, fontSize: 16, color: "#111" },
   profileEmail: { margin: 0, color: "#999", fontSize: 13 },
-  // comments
+
   commentAuthor: { fontWeight: 600, fontSize: 14, color: "#111" },
   commentProject: { fontSize: 12, color: "#aaa", margin: "4px 0 14px" },
   commentActions: { display: "flex", gap: 8 },
@@ -745,15 +762,13 @@ const styles = {
   actionBtnDanger: { backgroundColor: "#fdf0ee", color: "#c0392b", borderColor: "#f5c6c0" },
   actionBtnWarning: { backgroundColor: "#fef9e7", color: "#f39c12", borderColor: "#fdebd0" },
   commentBody: { fontSize: 14, color: "#444", margin: "6px 0 10px", lineHeight: 1.6 },
+  commentCard: { backgroundColor: "#fff", border: "1px solid #e8e8e8", borderRadius: 8, padding: "14px 16px" },
 
-  // form page
   formWrap: { maxWidth: 560 },
   formCard: { backgroundColor: "#fff", border: "1px solid #e8e8e8", borderRadius: 10, padding: "24px 28px" },
 
-  // search
   searchBar: { display: "flex", gap: 10, marginBottom: 28 },
   searchInput: { flex: 1, padding: "10px 14px", border: "1px solid #d0d7de", borderRadius: 6, fontSize: 14, fontFamily: "inherit", outline: "none", color: "#111", direction: "rtl" },
-
 };
 
 // ─── ROOT ─────────────────────────────────────────────────────────────────────

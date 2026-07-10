@@ -1,5 +1,7 @@
 from django.db import models
 from django.conf import settings
+from django.utils.text import slugify
+import uuid
 
 
 class PublicManager(models.Manager):
@@ -22,7 +24,13 @@ class Project(models.Model):
     title = models.CharField(max_length=250)
 
     # اگر API با id کار می‌کند، این معمولاً بهتر از unique_for_date است:
-    slug = models.SlugField(max_length=250, unique=True)
+    slug = models.SlugField(max_length=250, unique=True, blank=True)
+
+    def save(self, *args, **kwargs):
+        if not self.slug:
+            self.slug = slugify(self.title)
+
+        super().save(*args, **kwargs)
 
     visibility = models.CharField(
         max_length=2,
