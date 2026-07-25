@@ -2,11 +2,12 @@ import uuid
 
 from django.contrib.auth.models import User
 from django.db import models
+from django.contrib.auth import get_user_model
 
 
 # Create your models here.
 # activity/models.py
-class ActivityLog(models.Model):
+'''class ActivityLog(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='activity_logs')
     path = models.CharField(max_length=255)
     method = models.CharField(max_length=10)
@@ -18,4 +19,5 @@ class ActivityLog(models.Model):
     class Meta:
         indexes = [
             models.Index(fields=['user', 'created_at']),
-        ]
+        ]'''
+

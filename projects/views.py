@@ -54,7 +54,7 @@ class UserProjectComments(APIView):
 
 
 class UserProjectComment(APIView):
-    @extend_schema(request=CommentProjectOwnerSerializer)  #
+    @extend_schema(request=CommentProjectOwnerSerializer)
     def patch(self, request, pk):
         try:
             comment = Comment.objects.get(pk=pk, project__author=request.user)
@@ -67,6 +67,17 @@ class UserProjectComment(APIView):
         serializer = CommentProjectOwnerSerializer(comment, data=request.data, partial=True)
         if serializer.is_valid():
             serializer.save()
+
+            # ارسال notification به کامنت‌گذار
+            new_status = serializer.validated_data.get("status")
+            if new_status in ["AP", "RJ"]:
+                from notifications.tasks import send_comment_notification
+                send_comment_notification.delay(
+                    recipient_id=comment.author.id,
+                    comment_id=comment.id,
+                    status=new_status,
+                )
+
             return Response(serializer.data)
 
         return Response(serializer.errors, status=400)
@@ -171,6 +182,26 @@ class ProjectSearchView(APIView):
         return paginator.get_paginated_response(serializer.data)
 
 
+class ProjectDetailView(generics.RetrieveAPIView):
+    serializer_class = ProjectSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_object(self):
+        pk = self.kwargs["pk"]
+        try:
+            project = Project.objects.get(pk=pk)
+        except Project.DoesNotExist:
+            from rest_framework.exceptions import NotFound
+            raise NotFound("پروژه پیدا نشد")
+
+        # public پروژه یا owner خود کاربر
+        if project.visibility == "PB" or project.author == self.request.user:
+            return project
+
+        from rest_framework.exceptions import PermissionDenied
+        raise PermissionDenied("دسترسی ندارید")
+
+
 class SecureProjectFileView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
@@ -181,11 +212,24 @@ class SecureProjectFileView(APIView):
         except Exception:
             return Response({"detail": "Invalid or expired token"}, status=403)
 
-        # چک کن یا owner هست یا پروژه public
         if project.visibility != "PB" and project.author != request.user:
             return Response({"detail": "Access denied"}, status=403)
 
-        # فایل رو سرو کن
+        # چک کن آیا کاربر جدید هست
+        from projects.models import ProjectDownload
+        from notifications.tasks import send_download_notification
+
+        is_new = not ProjectDownload.objects.filter(
+            project=project, user=request.user
+        ).exists()
+
+        if is_new and project.author != request.user:
+            ProjectDownload.objects.create(project=project, user=request.user)
+            send_download_notification.delay(
+                project_id=project.id,
+                downloader_id=request.user.id,
+            )
+
         from django.http import FileResponse
         return FileResponse(project.file.open(), as_attachment=True, filename=project.file.name.split("/")[-1])
 

@@ -1,5 +1,5 @@
 # activity/middleware.py
-import time
+'''import time
 from .models import ActivityLog
 
 
@@ -21,4 +21,4 @@ class ActivityTrackingMiddleware:
                 ip_address=request.META.get('REMOTE_ADDR'),
             )
 
-        return response
+        return response'''

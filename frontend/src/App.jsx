@@ -1,4 +1,4 @@
-import { useState, useEffect, createContext, useContext } from "react";
+import { useState, useEffect, createContext, useContext, useRef } from "react";
 
 // ─── API CONFIG ──────────────────────────────────────────────────────────────
 const API = "http://localhost:8000";
@@ -76,6 +76,96 @@ function Router() {
   );
 }
 
+// ─── NOTIFICATION BELL ────────────────────────────────────────────────────────
+function NotificationBell() {
+  const { tokens } = useAuth();
+  const [notifs, setNotifs] = useState([]);
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const ref = useRef(null);
+
+  const unread = notifs.filter(n => !n.is_read).length;
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const data = await api.get("/notifications/", tokens.access);
+      setNotifs(data.results ?? data);
+    } catch { }
+    finally { setLoading(false); }
+  };
+
+  useEffect(() => {
+    load();
+    const interval = setInterval(load, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  const markRead = async (id) => {
+    try {
+      await api.patch(`/notifications/${id}/read/`, {}, tokens.access);
+      setNotifs(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
+    } catch { }
+  };
+
+  const markAllRead = async () => {
+    try {
+      await api.post("/notifications/read-all/", {}, tokens.access);
+      setNotifs(prev => prev.map(n => ({ ...n, is_read: true })));
+    } catch { }
+  };
+
+  return (
+    <div ref={ref} style={{ position: "relative" }}>
+      <button
+        style={{ ...styles.navBtn, backgroundColor: "transparent", position: "relative", padding: "6px 10px" }}
+        onClick={() => setOpen(o => !o)}
+      >
+        🔔
+        {unread > 0 && (
+          <span style={styles.badge_notif}>{unread}</span>
+        )}
+      </button>
+
+      {open && (
+        <div style={styles.notifDropdown}>
+          <div style={styles.notifHeader}>
+            <span style={{ fontWeight: 600, fontSize: 14 }}>نوتیفیکیشن‌ها</span>
+            {unread > 0 && (
+              <button style={styles.markAllBtn} onClick={markAllRead}>همه خوانده شد</button>
+            )}
+          </div>
+
+          {loading ? (
+            <div style={styles.notifEmpty}>در حال بارگذاری...</div>
+          ) : notifs.length === 0 ? (
+            <div style={styles.notifEmpty}>نوتیفیکیشنی ندارید</div>
+          ) : (
+            <div style={{ maxHeight: 320, overflowY: "auto" }}>
+              {notifs.map(n => (
+                <div
+                  key={n.id}
+                  style={{ ...styles.notifItem, ...(n.is_read ? {} : styles.notifItemUnread) }}
+                  onClick={() => !n.is_read && markRead(n.id)}
+                >
+                  <p style={styles.notifMsg}>{n.message}</p>
+                  <span style={styles.notifDate}>{new Date(n.created_at).toLocaleDateString("fa-IR")}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── NAV ──────────────────────────────────────────────────────────────────────
 function Nav({ page, nav }) {
   const { logout } = useAuth();
@@ -99,6 +189,7 @@ function Nav({ page, nav }) {
           style={{ ...styles.navBtn, ...(page === "search" ? styles.navBtnActive : { backgroundColor: "transparent" }) }}
           onClick={() => nav("search")}
         >جستجو</button>
+        <NotificationBell />
         <button style={{ ...styles.navBtn, backgroundColor: "transparent", color: "#999" }} onClick={logout}>خروج</button>
       </div>
     </nav>
@@ -145,23 +236,8 @@ function AuthPage() {
           >ثبت‌نام</button>
         </div>
 
-        <input
-          style={styles.input}
-          placeholder="نام کاربری"
-          value={username}
-          onChange={e => setUsername(e.target.value)}
-          onKeyDown={e => e.key === "Enter" && submit()}
-          dir="ltr"
-        />
-        <input
-          style={styles.input}
-          type="password"
-          placeholder="رمز عبور"
-          value={password}
-          onChange={e => setPassword(e.target.value)}
-          onKeyDown={e => e.key === "Enter" && submit()}
-          dir="ltr"
-        />
+        <input style={styles.input} placeholder="نام کاربری" value={username} onChange={e => setUsername(e.target.value)} onKeyDown={e => e.key === "Enter" && submit()} dir="ltr" />
+        <input style={styles.input} type="password" placeholder="رمز عبور" value={password} onChange={e => setPassword(e.target.value)} onKeyDown={e => e.key === "Enter" && submit()} dir="ltr" />
 
         {error && <p style={styles.error}>{error}</p>}
 
@@ -263,13 +339,10 @@ function ProjectDetailPage({ nav, projectId }) {
   const [submitError, setSubmitError] = useState("");
   const [submitSuccess, setSubmitSuccess] = useState(false);
 
-  useEffect(() => {
-    api.get(`/projects/my-projects/`, tokens.access)
-      .then(data => {
-        const all = data.results ?? data;
-        const p = all.find(x => x.id === projectId);
-        setProject(p ?? null);
-      })
+    useEffect(() => {
+    api.get(`/projects/projects/${projectId}/`, tokens.access)
+      .then(data => setProject(data))
+      .catch(() => setProject(null))
       .finally(() => setLoadingProject(false));
 
     api.get(`/projects/projects/${projectId}/comments/`, tokens.access)
@@ -355,6 +428,7 @@ function ProjectDetailPage({ nav, projectId }) {
   );
 }
 
+
 // ─── PROJECT FORM PAGE ────────────────────────────────────────────────────────
 function ProjectFormPage({ nav, projectId }) {
   const { tokens } = useAuth();
@@ -421,28 +495,13 @@ function ProjectFormPage({ nav, projectId }) {
 
       <div style={styles.formCard}>
         <label style={styles.label}>عنوان</label>
-        <input
-          style={styles.input}
-          value={title}
-          onChange={e => { setTitle(e.target.value); if (!isEdit) setSlug(autoSlug(e.target.value)); }}
-          placeholder="عنوان پروژه"
-        />
+        <input style={styles.input} value={title} onChange={e => { setTitle(e.target.value); if (!isEdit) setSlug(autoSlug(e.target.value)); }} placeholder="عنوان پروژه" />
 
         <label style={styles.label}>Slug (آدرس یکتا)</label>
-        <input
-          style={{ ...styles.input, direction: "ltr" }}
-          value={slug}
-          onChange={e => setSlug(e.target.value)}
-          placeholder="my-project-slug"
-        />
+        <input style={{ ...styles.input, direction: "ltr" }} value={slug} onChange={e => setSlug(e.target.value)} placeholder="my-project-slug" />
 
         <label style={styles.label}>توضیحات</label>
-        <textarea
-          style={{ ...styles.input, minHeight: 120, resize: "vertical" }}
-          value={description}
-          onChange={e => setDescription(e.target.value)}
-          placeholder="توضیح کوتاهی درباره پروژه بنویسید..."
-        />
+        <textarea style={{ ...styles.input, minHeight: 120, resize: "vertical" }} value={description} onChange={e => setDescription(e.target.value)} placeholder="توضیح کوتاهی درباره پروژه بنویسید..." />
 
         <label style={styles.label}>دیدپذیری</label>
         <select style={styles.input} value={visibility} onChange={e => setVisibility(e.target.value)}>
@@ -451,11 +510,7 @@ function ProjectFormPage({ nav, projectId }) {
         </select>
 
         <label style={styles.label}>فایل پروژه (اختیاری)</label>
-        <input
-          type="file"
-          style={{ ...styles.input, padding: "10px 12px" }}
-          onChange={e => setFile(e.target.files[0])}
-        />
+        <input type="file" style={{ ...styles.input, padding: "10px 12px" }} onChange={e => setFile(e.target.files[0])} />
 
         {error && <p style={styles.error}>{error}</p>}
 
@@ -707,7 +762,7 @@ const styles = {
   shell: { minHeight: "100vh", backgroundColor: "#fafafa", fontFamily: "system-ui, sans-serif", direction: "rtl" },
   nav: { backgroundColor: "#fff", borderBottom: "1px solid #eee", padding: "0 24px", display: "flex", alignItems: "center", justifyContent: "space-between", height: 56 },
   navBrand: { fontWeight: 700, fontSize: 17, letterSpacing: "-0.3px", color: "#111" },
-  navLinks: { display: "flex", gap: 4 },
+  navLinks: { display: "flex", gap: 4, alignItems: "center" },
   navBtn: { background: "none", border: "none", cursor: "pointer", padding: "6px 12px", borderRadius: 6, fontSize: 14, color: "#555", fontFamily: "inherit" },
   navBtnActive: { color: "#111", fontWeight: 600, backgroundColor: "#f0f0f0" },
   main: { maxWidth: 800, margin: "0 auto", padding: "32px 20px" },
@@ -769,6 +824,17 @@ const styles = {
 
   searchBar: { display: "flex", gap: 10, marginBottom: 28 },
   searchInput: { flex: 1, padding: "10px 14px", border: "1px solid #d0d7de", borderRadius: 6, fontSize: 14, fontFamily: "inherit", outline: "none", color: "#111", direction: "rtl" },
+
+  // notification
+  badge_notif: { position: "absolute", top: 2, right: 2, backgroundColor: "#e53e3e", color: "#fff", borderRadius: "50%", fontSize: 10, fontWeight: 700, width: 16, height: 16, display: "flex", alignItems: "center", justifyContent: "center" },
+  notifDropdown: { position: "absolute", top: 44, left: 0, width: 320, backgroundColor: "#fff", border: "1px solid #e8e8e8", borderRadius: 10, boxShadow: "0 4px 16px rgba(0,0,0,.1)", zIndex: 1000 },
+  notifHeader: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px", borderBottom: "1px solid #f0f0f0" },
+  markAllBtn: { background: "none", border: "none", cursor: "pointer", fontSize: 12, color: "#2563eb", fontFamily: "inherit" },
+  notifEmpty: { padding: "24px 16px", textAlign: "center", color: "#aaa", fontSize: 13 },
+  notifItem: { padding: "12px 16px", borderBottom: "1px solid #f5f5f5", cursor: "pointer" },
+  notifItemUnread: { backgroundColor: "#f0f7ff" },
+  notifMsg: { margin: "0 0 4px", fontSize: 13, color: "#333", lineHeight: 1.5 },
+  notifDate: { fontSize: 11, color: "#aaa" },
 };
 
 // ─── ROOT ─────────────────────────────────────────────────────────────────────

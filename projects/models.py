@@ -1,3 +1,4 @@
+from django.contrib.auth.models import User
 from django.db import models
 from django.conf import settings
 from django.utils.text import slugify
@@ -54,8 +55,16 @@ class Project(models.Model):
         return self.title
 
 
-class Comment(models.Model):
+class ProjectDownload(models.Model):
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="downloads")
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="downloads")
+    downloaded_at = models.DateTimeField(auto_now_add=True)
 
+    class Meta:
+        unique_together = ["project", "user"]  # هر کاربر فقط یه بار ثبت میشه
+
+
+class Comment(models.Model):
     class Status(models.TextChoices):
         PENDING = "PD", "در انتظار بررسی"
         APPROVED = "AP", "تأیید شده"
