@@ -6,14 +6,23 @@ from .models import Profile
 from .utils import generate_image_token
 from django.urls import reverse
 
+# بعد
+from django.contrib.auth.password_validation import validate_password
+from rest_framework.validators import UniqueValidator
+
 
 class RegisterSerializer(serializers.ModelSerializer):
+    username = serializers.CharField(
+        validators=[UniqueValidator(
+            queryset=User.objects.all(),
+            message="این نام کاربری قبلاً ثبت شده است."
+        )]
+    )
+    password = serializers.CharField(write_only=True, validators=[validate_password])
+
     class Meta:
         model = User
         fields = ["username", "password"]
-        extra_kwargs = {
-            "password": {"write_only": True}
-        }
 
     def create(self, validated_data):
         user = User.objects.create_user(
@@ -26,7 +35,7 @@ class RegisterSerializer(serializers.ModelSerializer):
 class ProfileSerializer(serializers.ModelSerializer):
     username = serializers.CharField(source='user.username', read_only=True)
     email = serializers.EmailField(source='user.email', read_only=True)
-    profile_image_url = serializers.SerializerMethodField(read_only=True,required=False)
+    profile_image_url = serializers.SerializerMethodField(read_only=True, required=False)
     profile_image = serializers.ImageField(write_only=True)
 
     # این فیلد اصلی برای آپلود فایل است (ورودی/خروجی)
@@ -43,7 +52,7 @@ class ProfileSerializer(serializers.ModelSerializer):
             'profile_image_url',
             'profile_image'
         ]
-        read_only_fields = ['id', 'email','username', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'email', 'username', 'created_at', 'updated_at']
 
     def get_profile_image_url(self, obj):
         token = generate_image_token(obj.id)
@@ -56,7 +65,3 @@ class ProfileSerializer(serializers.ModelSerializer):
         )
 
         return request.build_absolute_uri(url)
-
-
-
-

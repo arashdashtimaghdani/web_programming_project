@@ -90,3 +90,8 @@ class SecureProfileImageView(View):
             raise Http404("Image not found")
 
         return FileResponse(profile.profile_image.open("rb"))
+
+
+class RegisterView(generics.CreateAPIView):
+    serializer_class = RegisterSerializer
+    permission_classes = [permissions.AllowAny]

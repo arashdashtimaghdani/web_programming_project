@@ -252,7 +252,14 @@ class ProjectCommentCreateView(APIView):
             context={"request": request, "project": project}
         )
         if serializer.is_valid():
-            serializer.save()
+            comment = serializer.save()
+
+            from notifications.tasks import send_new_comment_notification
+            send_new_comment_notification.delay(
+                project_id=project.id,
+                comment_id=comment.id,
+            )
+
             return Response(serializer.data, status=201)
         return Response(serializer.errors, status=400)
 

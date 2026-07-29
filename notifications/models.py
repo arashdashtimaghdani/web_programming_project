@@ -11,6 +11,7 @@ class Notification(models.Model):
         COMMENT_APPROVED = "CA", "کامنت تأیید شد"
         COMMENT_REJECTED = "CR", "کامنت رد شد"
         PROJECT_DOWNLOADED = "PD", "پروژه دانلود شد"
+        NEW_COMMENT = "NC", "کامنت جدید"
 
     recipient = models.ForeignKey(User, on_delete=models.CASCADE, related_name="notifications")
     type = models.CharField(max_length=2, choices=Type.choices)

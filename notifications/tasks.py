@@ -72,3 +72,36 @@ def send_download_notification(project_id, downloader_id):
             )
     except Exception:
         pass
+
+
+@shared_task
+def send_new_comment_notification(project_id, comment_id):
+    from django.contrib.auth import get_user_model
+    from projects.models import Comment, Project
+
+    User = get_user_model()
+    try:
+        project = Project.objects.get(id=project_id)
+        comment = Comment.objects.get(id=comment_id)
+
+        if project.author == comment.author:
+            return  # خود صاحب پروژه روی پروژه‌اش کامنت گذاشته
+
+        msg = f"کاربر «{comment.author.username}» روی پروژه «{project.title}» شما کامنت گذاشت."
+
+        Notification.objects.create(
+            recipient=project.author,
+            type=Notification.Type.NEW_COMMENT,
+            message=msg,
+        )
+
+        if project.author.email:
+            send_mail(
+                subject="SkillSphere — " + msg,
+                message=msg,
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                recipient_list=[project.author.email],
+                fail_silently=True,
+            )
+    except Exception:
+        pass

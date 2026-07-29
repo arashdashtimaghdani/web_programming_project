@@ -1,6 +1,5 @@
-# activity/middleware.py
-'''import time
-from .models import ActivityLog
+import time
+from .tasks import log_activity
 
 
 class ActivityTrackingMiddleware:
@@ -12,13 +11,12 @@ class ActivityTrackingMiddleware:
         response = self.get_response(request)
 
         if request.user.is_authenticated:
-            ActivityLog.objects.create(
-                user=request.user,
+            log_activity.delay(
+                user_id=request.user.id,
                 path=request.path,
                 method=request.method,
                 status_code=response.status_code,
                 duration_ms=int((time.time() - start_time) * 1000),
                 ip_address=request.META.get('REMOTE_ADDR'),
             )
-
-        return response'''
+        return response
