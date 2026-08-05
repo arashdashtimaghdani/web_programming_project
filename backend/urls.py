@@ -13,6 +13,7 @@ urlpatterns = [
     path("accounts/", include("accounts.urls")),
     path("projects/", include("projects.urls")),
     path("notifications/", include("notifications.urls")),
+    path("dashboard/", include("dashboard.urls")),
 
 
     path("api/token/", TokenObtainPairView.as_view(), name='token_obtain_pair'),

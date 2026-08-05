@@ -1,9 +1,37 @@
 import { useState, useEffect, createContext, useContext, useRef } from "react";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+// ─── FILE DOWNLOAD HELPER ──────────────────────────────────────────────────────
+async function downloadProjectFile(fileUrl, filename, accessToken) {
+  try {
+    const res = await fetch(fileUrl, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (!res.ok) {
+      console.error("Download failed:", res.status, await res.text());
+      alert(`خطا در دانلود فایل (کد ${res.status})`);
+      return;
+    }
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename || "download";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(url);
+  } catch (err) {
+    console.error("Download error:", err);
+    alert("خطا در برقراری ارتباط برای دانلود فایل");
+  }
+}
+
 
 // ─── API CONFIG ──────────────────────────────────────────────────────────────
 const API = "http://localhost:8000";
 
 const api = {
+
   async request(method, path, body, token, isFormData = false) {
     const headers = {};
     if (token) headers["Authorization"] = `Bearer ${token}`;
@@ -66,6 +94,7 @@ function Router() {
       <Nav page={page} nav={nav} />
       <main style={styles.main}>
         {page === "projects" && <ProjectsPage nav={nav} />}
+        {page === "dashboard" && <DashboardPage />}
         {page === "project-form" && <ProjectFormPage nav={nav} projectId={projectId} />}
         {page === "project-detail" && <ProjectDetailPage nav={nav} projectId={projectId} />}
         {page === "profile" && <ProfilePage />}
@@ -173,6 +202,10 @@ function Nav({ page, nav }) {
     <nav style={styles.nav}>
       <span style={styles.navBrand}>SkillSphere</span>
       <div style={styles.navLinks}>
+        <button
+          style={{ ...styles.navBtn, ...(page === "dashboard" ? styles.navBtnActive : { backgroundColor: "transparent" }) }}
+         onClick={() => nav("dashboard")}
+         >داشبورد</button>
         <button
           style={{ ...styles.navBtn, ...(page === "projects" ? styles.navBtnActive : { backgroundColor: "transparent" }) }}
           onClick={() => nav("projects")}
@@ -300,9 +333,15 @@ function ProjectsPage({ nav }) {
               </div>
               <p style={styles.cardDesc}>{p.description}</p>
               {p.file_url && (
-                <a href={p.file_url} target="_blank" style={styles.downloadLink} onClick={e => e.stopPropagation()}>
-                  ⬇ دانلود فایل
-                </a>
+                <button
+                   style={styles.downloadLink}
+                   onClick={e => {
+                   e.stopPropagation();
+                   downloadProjectFile(p.file_url, p.title, tokens.access);
+                 }}
+>
+  دانلود
+</button>
               )}
               <div style={styles.cardFooter}>
                 <span style={styles.cardDate}>{new Date(p.created_at).toLocaleDateString("fa-IR")}</span>
@@ -734,9 +773,15 @@ function SearchPage({ nav }) {
               </div>
               <p style={styles.cardDesc}>{p.description}</p>
               {p.file_url && (
-                <a href={p.file_url} target="_blank" style={styles.downloadLink} onClick={e => e.stopPropagation()}>
-                  ⬇ دانلود فایل پروژه
-                </a>
+                <button
+                  style={styles.downloadLink}
+                  onClick={e => {
+                  e.stopPropagation();
+                  downloadProjectFile(p.file_url, p.title, tokens.access);
+                      }}
+                >
+                 دانلود
+               </button>
               )}
               <div style={styles.cardFooter}>
                 <span style={styles.cardDate}>{new Date(p.created_at).toLocaleDateString("fa-IR")}</span>
@@ -752,6 +797,116 @@ function SearchPage({ nav }) {
           <span style={{ color: "#666", fontSize: 14 }}>{page} از {totalPages}</span>
           <button style={styles.pageBtn} disabled={page <= 1} onClick={() => runSearch(page - 1)}>← قبلی</button>
         </div>
+      )}
+    </div>
+  );
+}
+// ─── DASHBOARD PAGE ───────────────────────────────────────────────────────────
+function StatCard({ label, value }) {
+  return (
+    <div style={styles.statCard}>
+      <p style={styles.statValue}>{value}</p>
+      <p style={styles.statLabel}>{label}</p>
+    </div>
+  );
+}
+
+function ActivityChart({ data }) {
+  const chartData = data.map(d => ({
+    ...d,
+    label: new Date(d.date).toLocaleDateString("fa-IR", { month: "short", day: "numeric" }),
+  }));
+  return (
+    <div style={{ width: "100%", height: 220 }}>
+      <ResponsiveContainer>
+        <LineChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+          <XAxis dataKey="label" fontSize={11} stroke="#999" />
+          <YAxis fontSize={11} stroke="#999" allowDecimals={false} />
+          <Tooltip />
+          <Line type="monotone" dataKey="count" stroke="#111" strokeWidth={2} dot={false} />
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+function TopProjectsTable({ rows, showAuthor }) {
+  if (!rows.length) return <p style={{ color: "#aaa", fontSize: 13 }}>هنوز پروژه‌ای ثبت نشده</p>;
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      {rows.map(r => (
+        <div key={r.id} style={styles.topProjectRow}>
+          <span style={{ fontSize: 14, color: "#111" }}>
+            {r.title}{showAuthor && r.author__username ? ` — ${r.author__username}` : ""}
+          </span>
+          <span style={styles.badge}>{r.download_count} دانلود</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function DashboardPage() {
+  const { tokens } = useAuth();
+  const [data, setData] = useState(null);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    api.get("/dashboard/", tokens.access)
+      .then(setData)
+      .catch(() => setError("خطا در بارگذاری داشبورد"));
+  }, []);
+
+  if (error) return <p style={styles.error}>{error}</p>;
+  if (!data) return <p style={styles.empty}>در حال بارگذاری...</p>;
+
+  return (
+    <div>
+      <div style={styles.pageHeader}>
+        <h2 style={styles.pageTitle}>داشبورد شما</h2>
+      </div>
+
+      <div style={styles.statGrid}>
+        <StatCard label="پروژه‌ها" value={data.projects_count} />
+        <StatCard label="پروژه‌های عمومی" value={data.public_projects_count} />
+        <StatCard label="دانلودها" value={data.total_downloads} />
+        <StatCard label="کامنت‌های دریافتی" value={data.comments_received} />
+      </div>
+
+      <div style={styles.card}>
+        <h3 style={styles.cardTitle}>فعالیت شما (۱۴ روز اخیر)</h3>
+        <ActivityChart data={data.activity_over_time} />
+      </div>
+
+      <div style={{ ...styles.card, marginTop: 16 }}>
+        <h3 style={styles.cardTitle}>پرطرفدارترین پروژه‌های شما</h3>
+        <TopProjectsTable rows={data.top_projects} showAuthor={false} />
+      </div>
+
+      {data.system && (
+        <>
+          <div style={styles.pageHeader}>
+            <h2 style={styles.pageTitle}>آمار کلی سیستم (ادمین)</h2>
+          </div>
+
+          <div style={styles.statGrid}>
+            <StatCard label="کل کاربران" value={data.system.users_count} />
+            <StatCard label="کل پروژه‌ها" value={data.system.projects_count} />
+            <StatCard label="کل دانلودها" value={data.system.total_downloads} />
+            <StatCard label="کل کامنت‌ها" value={data.system.comments_count} />
+          </div>
+
+          <div style={styles.card}>
+            <h3 style={styles.cardTitle}>فعالیت کل سیستم (۱۴ روز اخیر)</h3>
+            <ActivityChart data={data.system.activity_over_time} />
+          </div>
+
+          <div style={{ ...styles.card, marginTop: 16 }}>
+            <h3 style={styles.cardTitle}>پرطرفدارترین پروژه‌های سیستم</h3>
+            <TopProjectsTable rows={data.system.top_projects} showAuthor={true} />
+          </div>
+        </>
       )}
     </div>
   );

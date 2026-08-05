@@ -56,7 +56,12 @@ class ProjectSerializer(serializers.ModelSerializer):
     def get_file_url(self, obj):
         request = self.context.get("request")
         if obj.file and request:
-            return request.build_absolute_uri(obj.file.url)
+            from django.urls import reverse
+            from .utils import generate_file_token
+
+            token = generate_file_token(obj.id)
+            url = reverse("secure_project_file", kwargs={"token": token})
+            return request.build_absolute_uri(url)
         return None
 
     class Meta:

@@ -51,6 +51,7 @@ INSTALLED_APPS = [
     'files',
     'notifications',
     'projects',
+    'dashboard',
 ]
 
 MIDDLEWARE = [
@@ -137,11 +138,8 @@ EMAIL_HOST = 'smtp.gmail.com'
 EMAIL_PORT = 587
 EMAIL_USE_TLS = True
 
-
-
 EMAIL_HOST_USER = 'arrashdashtim@gmail.com'
 EMAIL_HOST_PASSWORD = 'vwaocxhzmuthrsno'
-
 
 # Password validation
 AUTH_PASSWORD_VALIDATORS = [
