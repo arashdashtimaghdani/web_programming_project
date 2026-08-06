@@ -13,24 +13,25 @@ from rest_framework.validators import UniqueValidator
 
 class RegisterSerializer(serializers.ModelSerializer):
     username = serializers.CharField(
-        validators=[UniqueValidator(
-            queryset=User.objects.all(),
-            message="این نام کاربری قبلاً ثبت شده است."
-        )]
+        validators=[UniqueValidator(queryset=User.objects.all(), message="این نام کاربری قبلاً ثبت شده است.")]
+    )
+    email = serializers.EmailField(
+        required=True,
+        validators=[UniqueValidator(queryset=User.objects.all(), message="این ایمیل قبلاً ثبت شده است.")]
     )
     password = serializers.CharField(write_only=True, validators=[validate_password])
 
     class Meta:
         model = User
-        fields = ["username", "password"]
+        fields = ["username", "email", "password"]
 
     def create(self, validated_data):
         user = User.objects.create_user(
             username=validated_data["username"],
+            email=validated_data["email"],
             password=validated_data["password"]
         )
         return user
-
 
 class ProfileSerializer(serializers.ModelSerializer):
     username = serializers.CharField(source='user.username', read_only=True)

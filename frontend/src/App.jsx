@@ -234,21 +234,23 @@ function AuthPage() {
   const { login } = useAuth();
   const [mode, setMode] = useState("login");
   const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
   const submit = async () => {
     if (!username || !password) return setError("نام کاربری و رمز عبور الزامی است");
+    if (mode === "register" && !email) return setError("ایمیل الزامی است");
     setError(""); setLoading(true);
     try {
       if (mode === "register") {
-        await api.post("/accounts/register/", { username, password });
+        await api.post("/accounts/register/", { username, email, password });
       }
       const t = await api.post("/api/token/", { username, password });
       login(t);
     } catch (e) {
-      setError(e?.detail || e?.username?.[0] || e?.password?.[0] || "خطا در ورود");
+      setError(e?.detail || e?.username?.[0] || e?.email?.[0] || e?.password?.[0] || "خطا در ورود");
     } finally { setLoading(false); }
   };
 
@@ -270,6 +272,9 @@ function AuthPage() {
         </div>
 
         <input style={styles.input} placeholder="نام کاربری" value={username} onChange={e => setUsername(e.target.value)} onKeyDown={e => e.key === "Enter" && submit()} dir="ltr" />
+        {mode === "register" && (
+          <input style={styles.input} type="email" placeholder="ایمیل" value={email} onChange={e => setEmail(e.target.value)} onKeyDown={e => e.key === "Enter" && submit()} dir="ltr" />
+        )}
         <input style={styles.input} type="password" placeholder="رمز عبور" value={password} onChange={e => setPassword(e.target.value)} onKeyDown={e => e.key === "Enter" && submit()} dir="ltr" />
 
         {error && <p style={styles.error}>{error}</p>}
@@ -281,7 +286,6 @@ function AuthPage() {
     </div>
   );
 }
-
 // ─── PROJECTS PAGE ────────────────────────────────────────────────────────────
 function ProjectsPage({ nav }) {
   const { tokens } = useAuth();
