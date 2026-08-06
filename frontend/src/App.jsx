@@ -504,7 +504,7 @@ function ProjectFormPage({ nav, projectId }) {
   const autoSlug = (t) => t.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
 
   const save = async () => {
-    if (!title || !description || !slug) return setError("عنوان، توضیحات و slug الزامی است");
+    if (!title || !description || !slug) return setError("عنوان و توضیحات الزامی است");
     if (file && file.size > 10 * 1024 * 1024) return setError("حجم فایل نباید بیشتر از ۱۰ مگابایت باشد.");
     setError(""); setSaving(true);
     try {
@@ -540,8 +540,6 @@ function ProjectFormPage({ nav, projectId }) {
         <label style={styles.label}>عنوان</label>
         <input style={styles.input} value={title} onChange={e => { setTitle(e.target.value); if (!isEdit) setSlug(autoSlug(e.target.value)); }} placeholder="عنوان پروژه" />
 
-        <label style={styles.label}>Slug (آدرس یکتا)</label>
-        <input style={{ ...styles.input, direction: "ltr" }} value={slug} onChange={e => setSlug(e.target.value)} placeholder="my-project-slug" />
 
         <label style={styles.label}>توضیحات</label>
         <textarea style={{ ...styles.input, minHeight: 120, resize: "vertical" }} value={description} onChange={e => setDescription(e.target.value)} placeholder="توضیح کوتاهی درباره پروژه بنویسید..." />

@@ -65,10 +65,21 @@ class ProjectSerializer(serializers.ModelSerializer):
         return None
 
     class Meta:
-        model = Project
-        fields = ['id', 'title', 'file', 'file_url', 'slug', 'description', 'author', 'author_username', 'created_at',
-                  'updated_at']
-        read_only_fields = ['id', 'author', 'file_url', 'created_at', 'updated_at']
+            model = Project
+            fields = [
+                "id",
+                "title",
+                "file",
+                "file_url",
+                "slug",
+                "description",
+                "visibility",
+                "author",
+                "author_username",
+                "created_at",
+                "updated_at",
+            ]
+            read_only_fields = ["id", "author", "file_url", "created_at", "updated_at"]
 
 
 class CommentSerializer(serializers.ModelSerializer):
