@@ -50,6 +50,13 @@ coverage/
 out/
 
 # ======================
+# Docker
+# ======================
+# Keep docker-compose.yml and Dockerfiles tracked
+# but ignore local override files
+docker-compose.override.yml
+
+# ======================
 # Other
 # ======================
 *.bak
